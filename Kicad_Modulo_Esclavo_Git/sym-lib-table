@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "LTC6811IG-1_PBF")(type "KiCad")(uri "${KIPRJMOD}/Librerias_Propias/LTC6811IG-1_PBF/LTC6811IG-1_PBF.kicad_sym")(options "")(descr ""))
+)
