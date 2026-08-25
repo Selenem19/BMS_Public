@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel BMS — monitor serie ESP32</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1417; --panel:#171D22; --panel2:#1E262C; --border:#2A343B;
+    --text:#E4E9ED; --dim:#8B98A3; --mute:#5A6670;
+    --amber:#F2A93B; --green:#3DD68C; --red:#F0554D; --blue:#4FA8E0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter',sans-serif; padding:2rem 1.5rem 4rem; min-height:100vh;
+  }
+  .wrap{max-width:760px; margin:0 auto;}
+  h1{font-size:20px; font-weight:600; margin:0 0 2px;}
+  .sub{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--mute); margin:0 0 1.75rem; letter-spacing:.02em;}
+  .bar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; margin-bottom:14px;
+  }
+  select, button{
+    font-family:'Inter',sans-serif; font-size:13px; background:var(--panel2);
+    color:var(--text); border:1px solid var(--border); border-radius:6px;
+    padding:8px 12px; cursor:pointer;
+  }
+  button{font-weight:500;}
+  button:hover{border-color:var(--blue);}
+  button.on{border-color:var(--red); color:var(--red);}
+  .status{display:flex; align-items:center; gap:8px; margin-left:auto; font-size:12px; color:var(--dim);}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--mute); transition:.2s;}
+  .dot.ok{background:var(--green); box-shadow:0 0 8px var(--green);}
+  .dot.err{background:var(--red); box-shadow:0 0 8px var(--red);}
+  .warn{
+    display:none; background:#2C1F17; border:1px solid var(--amber); color:var(--amber);
+    font-size:13px; border-radius:8px; padding:10px 14px; margin-bottom:14px;
+  }
+  details{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px; margin-bottom:14px; font-size:13px; color:var(--dim);
+  }
+  summary{cursor:pointer; color:var(--text); font-weight:500;}
+  pre{
+    font-family:'JetBrains Mono',monospace; font-size:12px; background:var(--bg);
+    border:1px solid var(--border); border-radius:6px; padding:10px 12px; margin:10px 0 0;
+    color:var(--green); overflow-x:auto;
+  }
+  .leds{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
+  .led-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:22px; text-align:center;
+  }
+  .led{
+    width:52px; height:52px; border-radius:50%; margin:0 auto 12px;
+    background:radial-gradient(circle at 35% 30%, #3A444C, #232A30);
+    border:1px solid var(--border); transition:.2s;
+  }
+  .led.closed{background:radial-gradient(circle at 35% 30%, #6CF0B0, var(--green)); box-shadow:0 0 22px 2px rgba(61,214,140,.55); border-color:var(--green);}
+  .led.fault{background:radial-gradient(circle at 35% 30%, #FF8A82, var(--red)); box-shadow:0 0 22px 2px rgba(240,85,77,.55); border-color:var(--red);}
+  .led-label{font-size:13px; color:var(--dim); margin-bottom:4px;}
+  .led-state{font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:500;}
+  .metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px;}
+  .metric{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px;}
+  .metric .l{font-size:11px; color:var(--mute); margin-bottom:4px;}
+  .metric .v{font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:500;}
+  .log{
+    background:#0A0D0F; border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px; height:150px; overflow-y:auto;
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--dim); line-height:1.6;
+  }
+  .log div.new{color:var(--text);}
+  .fan-row{display:flex; align-items:center; gap:14px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:14px;}
+  .fan-label{min-width:120px; font-size:13px; color:var(--dim);}
+  .fan-track{flex:1; height:8px; background:var(--panel2); border-radius:4px; overflow:hidden;}
+  .fan-fill{height:100%; width:0%; background:var(--green); transition:width .25s linear;}
+  .fan-val{font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:500; min-width:52px; text-align:right;}
+  .slaves{display:grid; gap:12px; margin-bottom:14px;}
+  .slave-card{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px 16px;}
+  .slave-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; color:var(--dim);}
+  .slave-head b{color:var(--text); font-weight:500;}
+  .cell-bars{display:flex; align-items:flex-end; gap:5px; height:64px;}
+  .cell-bars .c{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:3px;}
+  .cell-bars .c .b{width:100%; border-radius:3px 3px 0 0; min-height:3px; background:var(--mute);}
+  .cell-bars .c.donor .b{background:#D85A30;}
+  .cell-bars .c.recv .b{background:#1D9E75;}
+  .cell-bars .c .n{font-size:11px; color:var(--mute);}
+  .viewbar{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap;}
+  .vbtn{font-size:12px; padding:6px 12px; background:var(--panel); color:var(--dim);}
+  .vbtn.active{background:var(--panel2); color:var(--text); border-color:var(--blue);}
+  .elapsed{font-family:'JetBrains Mono',monospace; color:var(--mute); margin-left:2px;}
+  .legend{display:flex; gap:18px; font-size:12px; color:var(--dim); margin-bottom:10px;}
+  .legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:middle;}
+  .log-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-size:12px; color:var(--mute);}
+  .log-head button{font-size:12px; padding:5px 10px;}
+  .log-head button.paused{border-color:var(--amber); color:var(--amber);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Panel de validación BMS</h1>
+  <p class="sub">Monitor serie en tiempo real · lee directamente lo que envía tu firmware por USB</p>
+
+  <div class="bar">
+    <select id="baud">
+      <option value="9600">9600</option>
+      <option value="57600">57600</option>
+      <option value="115200" selected>115200</option>
+      <option value="230400">230400</option>
+    </select>
+    <button id="connectBtn">Conectar puerto serie</button>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">Desconectado</span><span class="elapsed" id="elapsed"></span></div>
+  </div>
+
+  <div class="warn" id="warn"></div>
+
+  <div class="viewbar">
+    <button class="vbtn active" data-view="all">Todo</button>
+    <button class="vbtn" data-view="contactors">Contactores</button>
+    <button class="vbtn" data-view="thermal">Térmico</button>
+    <button class="vbtn" data-view="balancing">Balanceo</button>
+  </div>
+
+  <details>
+    <summary>Formato que espera este panel</summary>
+    Envía por Serial una línea de texto cada vez que cambie el estado o cada pocos ciclos, con este formato (los campos que no envíes simplemente no se actualizan):
+    <pre>STATE,PRECARGA=1,CONTACTOR=0,FASE=PRECARGA,TMAX=42.3,SOC=87,SOP=100,FAN=65</pre>
+    Para el balanceo, una línea por esclavo con todos sus voltajes separados por ";" y quién dona/recibe (id global de celda):
+    <pre>STATE,CELLS0=3.620;3.710;3.550;...,DONOR0=1,RECV0=2,IBAL0=1.10,ACT0=1</pre>
+    En ESP-IDF basta un <code>printf</code> plano donde ya tienes el dato, sin pasar por ESP_LOGI:
+    <pre>// task_contactors.c, justo después de cada BMS_Set_PrechargeRelay/MainContactor
+printf("STATE,PRECARGA=1,CONTACTOR=0,FASE=PRECARGA\n");
+printf("STATE,PRECARGA=0,CONTACTOR=1,FASE=DRIVE\n");
+printf("STATE,PRECARGA=0,CONTACTOR=0,FASE=FALLO\n");
+
+// task_soc.c, junto al ESP_LOGI de telemetría del while(1)
+printf("STATE,TMAX=%.1f,SOC=%.1f,SOP=%.0f\n",
+       t_max, bms_telemetry.soc, bms_telemetry.sop);
+
+// task_termal.c, al final del while(1), tras fijar el PWM
+printf("STATE,FAN=%.0f\n", pwm_out);
+
+// task_balancing.c, una vez por esclavo, al final del bucle interno
+printf("STATE,CELLS%d=%sDONOR%d=%d,RECV%d=%d,IBAL%d=%.2f,ACT%d=%d\n",
+       slave, cell_buf, slave, max_cell_id, slave, min_cell_id,
+       slave, dynamic_current, slave, bms_balancing_status[slave].active ? 1 : 0);</pre>
+    Cada tarea envía solo los campos que conoce; el panel va completando el resto según llegan.
+  </details>
+
+  <div class="leds" id="secLeds">
+    <div class="led-card">
+      <div class="led" id="ledPrecarga"></div>
+      <div class="led-label">Relé de precarga</div>
+      <div class="led-state" id="txtPrecarga">—</div>
+    </div>
+    <div class="led-card">
+      <div class="led" id="ledContactor"></div>
+      <div class="led-label">Contactor principal</div>
+      <div class="led-state" id="txtContactor">—</div>
+    </div>
+  </div>
+
+  <div class="metrics" id="secMetrics">
+    <div class="metric"><div class="l">Fase</div><div class="v" id="mFase">—</div></div>
+    <div class="metric"><div class="l">T max</div><div class="v" id="mTmax">—</div></div>
+    <div class="metric"><div class="l">SoC</div><div class="v" id="mSoc">—</div></div>
+    <div class="metric"><div class="l">SoP</div><div class="v" id="mSop">—</div></div>
+  </div>
+
+  <div class="fan-row" id="secFan">
+    <div class="fan-label">Ventilador (PWM)</div>
+    <div class="fan-track"><div class="fan-fill" id="fanFill"></div></div>
+    <div class="fan-val" id="fanVal">— %</div>
+  </div>
+
+  <div class="legend" id="secLegend">
+    <span><i style="background:#D85A30;"></i>cede energía (donante)</span>
+    <span><i style="background:#1D9E75;"></i>recibe energía (receptora)</span>
+  </div>
+
+  <div class="slaves" id="secSlaves">
+    <div class="slave-card">
+      <div class="slave-head"><b>Esclavo 0</b><span id="s0status">—</span></div>
+      <div class="cell-bars" id="s0bars"></div>
+    </div>
+    <div class="slave-card">
+      <div class="slave-head"><b>Esclavo 1</b><span id="s1status">—</span></div>
+      <div class="cell-bars" id="s1bars"></div>
+    </div>
+    <div class="slave-card">
+      <div class="slave-head"><b>Esclavo 2</b><span id="s2status">—</span></div>
+      <div class="cell-bars" id="s2bars"></div>
+    </div>
+  </div>
+
+  <div class="log-head">
+    <span id="logCaption">Registro (todo)</span>
+    <button id="pauseBtn">Pausar</button>
+  </div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const connectBtn = document.getElementById('connectBtn');
+const baudSel = document.getElementById('baud');
+const dot = document.getElementById('dot');
+const statusText = document.getElementById('statusText');
+const warn = document.getElementById('warn');
+const logEl = document.getElementById('log');
+const ledPrecarga = document.getElementById('ledPrecarga');
+const ledContactor = document.getElementById('ledContactor');
+const txtPrecarga = document.getElementById('txtPrecarga');
+const txtContactor = document.getElementById('txtContactor');
+const mFase = document.getElementById('mFase');
+const mTmax = document.getElementById('mTmax');
+const mSoc = document.getElementById('mSoc');
+const mSop = document.getElementById('mSop');
+
+let port, reader, connected = false;
+
+if (!('serial' in navigator)) {
+  warn.style.display = 'block';
+  warn.textContent = 'Tu navegador no soporta Web Serial API. Usa Chrome o Edge, y abre esta página vía http://localhost (no funciona haciendo doble clic en el archivo).';
+  connectBtn.disabled = true;
+} else if (!window.isSecureContext) {
+  warn.style.display = 'block';
+  warn.textContent = 'Esta página necesita abrirse como http://localhost:PUERTO/ para poder usar el puerto serie. Sirve la carpeta con, por ejemplo, "python -m http.server" y ábrela desde el navegador.';
+  connectBtn.disabled = true;
+}
+
+let logHistory = [];
+let logPaused = false;
+let currentView = 'all';
+const logCaption = document.getElementById('logCaption');
+const pauseBtn = document.getElementById('pauseBtn');
+const captions = { all: 'todo', contactors: 'contactores', thermal: 'térmico', balancing: 'balanceo' };
+
+function matchesFilter(line, view) {
+  if (view === 'contactors') return line.includes('PRECARGA');
+  if (view === 'thermal') return line.includes('TMAX') || line.includes('FAN');
+  if (view === 'balancing') return line.includes('CELLS');
+  return true;
+}
+
+function renderLogView() {
+  const filtered = logHistory.filter(l => matchesFilter(l, currentView)).slice(-200);
+  logEl.innerHTML = '';
+  filtered.forEach((l, idx) => {
+    const d = document.createElement('div');
+    if (idx === filtered.length - 1) d.className = 'new';
+    d.textContent = l;
+    logEl.appendChild(d);
+  });
+  logEl.scrollTop = logEl.scrollHeight;
+  logCaption.textContent = 'Registro (' + captions[currentView] + (logPaused ? ' · en pausa' : '') + ')';
+}
+
+function log(line) {
+  logHistory.push(line);
+  if (logHistory.length > 500) logHistory.shift();
+  if (!logPaused) renderLogView();
+}
+
+pauseBtn.addEventListener('click', () => {
+  logPaused = !logPaused;
+  pauseBtn.textContent = logPaused ? 'Reanudar' : 'Pausar';
+  pauseBtn.classList.toggle('paused', logPaused);
+  if (!logPaused) renderLogView();
+  else logCaption.textContent = 'Registro (' + captions[currentView] + ' · en pausa)';
+});
+
+function setLed(ledEl, txtEl, val) {
+  ledEl.classList.remove('closed', 'fault');
+  if (val === '1' || val === 1) { ledEl.classList.add('closed'); txtEl.textContent = 'Cerrado'; }
+  else if (val === '0' || val === 0) { txtEl.textContent = 'Abierto'; }
+  else { txtEl.textContent = '—'; }
+}
+
+function handleLine(line) {
+  line = line.replace(/\x1b\[[0-9;]*m/g, '');
+  log(line);
+  if (!line.startsWith('STATE,')) return;
+  const parts = line.slice(6).split(',');
+  const data = {};
+  parts.forEach(p => { const [k, v] = p.split('='); if (k && v !== undefined) data[k.trim()] = v.trim(); });
+  if ('PRECARGA' in data) setLed(ledPrecarga, txtPrecarga, data.PRECARGA);
+  if ('CONTACTOR' in data) setLed(ledContactor, txtContactor, data.CONTACTOR);
+  if ('FASE' in data) {
+    mFase.textContent = data.FASE;
+    if (data.FASE === 'FALLO') {
+      ledPrecarga.classList.add('fault'); txtPrecarga.textContent = 'Fallo';
+      ledContactor.classList.add('fault'); txtContactor.textContent = 'Fallo';
+    }
+  }
+  if ('TMAX' in data) mTmax.textContent = parseFloat(data.TMAX).toFixed(1) + ' °C';
+  if ('SOC' in data) mSoc.textContent = parseFloat(data.SOC).toFixed(0) + ' %';
+  if ('SOP' in data) mSop.textContent = parseFloat(data.SOP).toFixed(0) + ' %';
+  if ('FAN' in data) {
+    const pwm = Math.max(0, Math.min(100, parseFloat(data.FAN)));
+    document.getElementById('fanFill').style.width = pwm + '%';
+    document.getElementById('fanVal').textContent = pwm.toFixed(0) + ' %';
+  }
+  renderSlave(0, data);
+  renderSlave(1, data);
+  renderSlave(2, data);
+}
+
+function renderSlave(i, data) {
+  const key = 'CELLS' + i;
+  if (!(key in data)) return;
+  const voltages = data[key].split(';').filter(v => v.length).map(parseFloat);
+  const donor = ('DONOR' + i) in data ? parseInt(data['DONOR' + i]) : null;
+  const recv = ('RECV' + i) in data ? parseInt(data['RECV' + i]) : null;
+  const start = i * voltages.length;
+  const barsEl = document.getElementById('s' + i + 'bars');
+  barsEl.innerHTML = '';
+  voltages.forEach((v, idx) => {
+    const globalId = start + idx;
+    const h = Math.max(6, Math.min(100, (v - 3.0) / 1.2 * 100));
+    const col = document.createElement('div');
+    col.className = 'c' + (globalId === donor ? ' donor' : globalId === recv ? ' recv' : '');
+    col.innerHTML = '<div class="b" style="height:' + h.toFixed(0) + '%"></div><div class="n">' + v.toFixed(2) + '</div>';
+    barsEl.appendChild(col);
+  });
+  const statusEl = document.getElementById('s' + i + 'status');
+  const active = ('ACT' + i) in data && data['ACT' + i] === '1';
+  const ibal = ('IBAL' + i) in data ? parseFloat(data['IBAL' + i]).toFixed(2) : null;
+  statusEl.textContent = active ? ('balanceando · ' + ibal + ' A') : 'niveladas';
+}
+
+async function readLoop() {
+  const textDecoder = new TextDecoderStream();
+  const readableClosed = port.readable.pipeTo(textDecoder.writable);
+  reader = textDecoder.readable.getReader();
+  let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (line) handleLine(line);
+      }
+    }
+  } catch (e) {
+    log('Conexión perdida: ' + e.message);
+  }
+  resetUI();
+}
+
+function resetUI() {
+  connected = false;
+  dot.className = 'dot';
+  statusText.textContent = 'Desconectado';
+  connectBtn.textContent = 'Conectar puerto serie';
+  connectBtn.classList.remove('on');
+  stopTimer();
+}
+
+async function doConnect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: parseInt(baudSel.value) });
+    connected = true;
+    dot.className = 'dot ok';
+    statusText.textContent = 'Conectado a ' + baudSel.value + ' baudios';
+    connectBtn.textContent = 'Desconectar';
+    connectBtn.classList.add('on');
+    log('--- puerto abierto ---');
+    startTimer();
+    readLoop();
+  } catch (e) {
+    dot.className = 'dot err';
+    statusText.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function doDisconnect() {
+  if (reader) { try { await reader.cancel(); } catch (e) {} }
+  if (port) { try { await port.close(); } catch (e) {} }
+  resetUI();
+}
+
+connectBtn.addEventListener('click', () => { connected ? doDisconnect() : doConnect(); });
+
+const viewSections = { secLeds: [], secMetrics: [], secFan: [], secSlaves: [], secLegend: [] };
+const views = {
+  all: ['secLeds', 'secMetrics', 'secFan', 'secSlaves', 'secLegend'],
+  contactors: ['secLeds'],
+  thermal: ['secFan', 'secMetrics'],
+  balancing: ['secSlaves', 'secMetrics', 'secLegend'],
+};
+document.querySelectorAll('.vbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.vbtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const show = views[btn.dataset.view];
+    Object.keys(viewSections).forEach(id => {
+      document.getElementById(id).style.display = show.includes(id) ? '' : 'none';
+    });
+    currentView = btn.dataset.view;
+    renderLogView();
+  });
+});
+
+let connectTime = null, timerInterval = null;
+function startTimer() {
+  connectTime = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - connectTime) / 1000);
+    const m = Math.floor(s / 60);
+    const ss = (s % 60).toString().padStart(2, '0');
+    document.getElementById('elapsed').textContent = 'T+' + m + ':' + ss;
+  }, 1000);
+}
+function stopTimer() {
+  clearInterval(timerInterval);
+  document.getElementById('elapsed').textContent = '';
+}
+</script>
+</body>
+</html>
