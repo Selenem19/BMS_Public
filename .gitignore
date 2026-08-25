@@ -1,0 +1,33 @@
+# ==============================
+# ESP-IDF (Firmware)
+# ==============================
+build/
+sdkconfig.old
+.vscode/
+
+# ==============================
+# KiCad (Hardware)
+# ==============================
+*.bak
+*.bck
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_prl
+*.lck
+fp-info-cache
+*-backups/
+
+# ==============================
+# MATLAB / Simulink (Simulation)
+# ==============================
+*.asv
+*.autosave
+*.autosave.x
+*.slxc
+slprj/
+
+# ==============================
+# Archivos del Sistema Operativo
+# ==============================
+.DS_Store
+Thumbs.db
